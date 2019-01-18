@@ -1,0 +1,19 @@
+(library
+    (name CompConstr)
+    (synopsis "Supervision work for IB Compiler Construction")
+    (flags (:standard -open Base -short-paths))
+    (libraries
+        base
+        stdio
+    )
+    (inline_tests)
+    (preprocess (pps ppx_jane))
+)
+
+; (menhir
+;     (modules parser)
+;     ; add --infer when jbuilder has pushed support for it
+;     (flags (--table --strict --comment --explain))
+; )
+; 
+; (ocamllex lexer)
