@@ -22,8 +22,10 @@ let disjoint base_num
   ; transitions=
       List.map transitions ~f:(fun (to_, via, from) ->
           (base_num + to_, via, base_num + from) )
-  ; epsilon_transitions
-  ; end_state }
+  ; epsilon_transitions =
+      List.map epsilon_transitions ~f:(fun (to_, from) ->
+          (base_num + to_, base_num + from))
+  ; end_state = base_num + end_state }
 
 let rec to_nfa = function
   | Null ->
@@ -52,7 +54,7 @@ let rec to_nfa = function
       ; start_state= new_start
       ; transitions
       ; epsilon_transitions=
-          (new_start, old_start) :: (new_end, old_end) :: eps
+          (new_start, old_start) :: (old_end, new_end) :: eps
       ; end_state= new_end }
   | Concat (first, second) ->
       let { number_of_states= second_num
