@@ -28,19 +28,24 @@ let rec compile_arith = function
 ;;
 
 let rec compile_bool = function
-  | True -> (failwith "hole")
-  | False -> (failwith "hole")
-  | Not exp -> (failwith "hole")
-  | And (first, second) -> (failwith "hole")
-  | Or (first, second) -> (failwith "hole")
-  | Bool_op (first, op, second) -> (failwith "hole")
+  | True -> [Push_bool true]
+  | False -> [Push_bool false]
+  | Not exp -> compile_bool exp @ [Not]
+  | And (first, second) -> compile_bool first @ compile_bool second @ [And]
+  | Or (first, second) -> compile_bool first @ compile_bool second @ [Or]
+  | Bool_op (first, op, second) -> let result = compile_arith first @ compile_arith second in
+                                   match op with
+                                   | Lt -> result @ [Less_than]
+                                   | Gt -> result @ [Greater_than]
+                                   | Eq -> result @ [Equals]
 
 let rec compile_statement = function
-  | Skip ->  (failwith "hole")
-  | Assign (var, exp) -> (failwith "hole")
-  | Seq (first, second) -> (failwith "hole")
-  | If (cond, true_, false_) -> (failwith "hole")
-  | While (cond, body) -> (failwith "hole")
+  | Skip ->  []
+  | Assign (var, exp) -> [Assign var] @ (compile_statement exp)
+  | Seq (first, second) -> compile_statement first @ compile_statement second
+  | If (cond, true_, false_) -> (compile_bool cond) @  [If (compile_statement true_, compile_statement false_)]
+  | While (cond, body) -> let res = compile_bool cond in 
+    result @ [While (res, compile_statement body)]
 ;;
 
 type value =
@@ -85,35 +90,67 @@ let two_ints = function
 
 let rec interp (env, stack) = function
 
-  | [] -> (failwith "hole")
+  | [] -> (env, stack)
 
-  | Lookup var :: rest -> (failwith "hole")
+  | Lookup var :: rest -> interp (env, (lookup env var) :: stack) rest
 
-  | Push_int int :: rest -> (failwith "hole")
+  | Push_int int :: rest -> interp (env, Int int :: stack) rest 
 
-  | Plus :: rest -> (failwith "hole")
+  | Plus :: rest -> 
+    let (a, b, stack') = two_ints stack in
+    interp (env, Int (a + b) :: stack') rest
 
-  | Times :: rest -> (failwith "hole")
+  | Times :: rest -> 
+    let (a, b, stack') = two_ints stack in
+    interp (env, Int (a * b) :: stack') rest
 
-  | Push_bool bool :: rest -> (failwith "hole")
+  | Push_bool bool :: rest -> interp (env, Bool bool :: stack) rest 
 
-  | Not :: rest -> (failwith "hole")
+  | Not :: rest -> 
+    let (a, stack') = one_bool stack in
+    if a then interp (env, false :: stack') rest
+    else interp (env, true :: stack') rest
 
-  | And :: rest -> (failwith "hole")
+  | And :: rest -> 
+    let (a, b, stack') = two_bools stack in
+    if a && n then interp (env, true :: stack') rest
+    else interp (env, false :: stack') rest
 
-  | Or :: rest -> (failwith "hole")
+  | Or :: rest -> 
+    let (a, b, stack') = two_bools stack in
+    if a || b then interp (env, true :: stack') rest
+    else interp (env, false :: stack') rest
 
-  | Less_than :: rest -> (failwith "hole")
+  | Less_than :: rest -> 
+    let (a, b, stack') = two_ints stack in
+    if a < b then interp (env, true :: stack') rest
+    else interp (env, false :: stack') rest
 
-  | Greater_than :: rest -> (failwith "hole")
+  | Greater_than :: rest -> 
+    let (a, b, stack') = two_ints stack in
+    if a > b then interp (env, true :: stack') rest
+    else interp (env, false :: stack') rest
 
-  | Equals :: rest -> (failwith "hole")
+  | Equals :: rest -> 
+    let (a, b, stack') = two_ints stack in 
+    if a = b then interp (env, true :: stack') rest
+    else interp (env, false :: stack') rest
 
-  | Assign var :: rest -> (failwith "hole")
+  | Assign var :: rest -> 
+    let (a, stack') = one_int stack in
+    interp ((var, a) :: env, stack') rest
 
-  | If (true_, false_) :: rest -> (failwith "hole")
+  | If (true_, false_) :: rest -> 
+    let (a, stack') = one_bool  stack in
+    (match b with
+    | true -> interp (env, new_stack) (true_ @ rest)
+    | false -> interp (env, new_stack) (false_ @ rest))
 
-  | While (cond, body) as loop :: rest -> (failwith "hole")
+  | While (cond, body) as loop :: rest -> 
+    let (b, new_stack) = one_bool stack in
+      (match b with
+      | true -> interp (env, new_stack) (body @ [loop] @ rest)
+      | false -> interp (env, new_stack) rest)
 
 ;;
 
