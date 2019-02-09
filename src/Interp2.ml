@@ -39,7 +39,7 @@ let rec compile_bool = function
 
 let rec compile_statement = function
   | Skip ->  []
-  | Assign (var, exp) -> [Assign var] @ (compile_arith exp)
+  | Assign (var, exp) -> (compile_arith exp) @ [Assign var]
   | Seq (first, second) -> compile_statement first @ compile_statement second
   | If (cond, true_, false_) -> (compile_bool cond) @  [If (compile_statement true_, compile_statement false_)]
   | While (cond, body) -> let res = compile_bool cond in 
