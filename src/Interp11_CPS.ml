@@ -65,7 +65,7 @@ let rec eval_statement (env, statement) return =
         if cond_val then eval_statement (cond_env, true_) (fun true_env -> return true_env)
                     else eval_statement (cond_env, false_) (fun false_env -> return false_env))
   | While (cond, body) as loop -> 
-    eval_bool (env, cond (fun cond_env, cond_val) ->
+    eval_bool (env, cond) (fun (cond_env, cond_val) ->
         if cond_val then eval_statement (cond_env, body) (fun body_env -> eval_statement (body_env, loop) (fun loop_env -> return loop_env))
                     else eval_statement (cond_env, loop) (fun loop_env -> return loop_env))
 ;;
@@ -75,4 +75,3 @@ let eval statement =
     ((fun x -> failwith @@ "Not found: " ^ x), statement)
     (fun x -> x)
 ;;
-`

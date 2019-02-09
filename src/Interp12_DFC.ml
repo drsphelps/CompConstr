@@ -77,8 +77,8 @@ and interp_bool (env, bool) =
   | Not rest -> interp_bool (env, if bool then Bool false else Bool true) rest 
   | And_with (bool2, rest) -> interp_bool (env, Bool (bool && bool2)) rest
   | Or_with (bool2, rest) -> interp_bool (env, Bool (bool || bool2)) rest
-  | Compile_then_and (bool_exp, rest) -> compile_arith (env, bool_exp) (And_with (bool, rest))
-  | Compile_then_or (bool_exp, rest) -> compile_arith (env, bool_exp) (Or_with (bool, rest))
+  | Compile_then_and (bool_exp, rest) -> compile_bool (env, bool_exp) (And_with (bool, rest))
+  | Compile_then_or (bool_exp, rest) -> compile_bool (env, bool_exp) (Or_with (bool, rest))
   | Branch (true_, false_, rest) -> if bool then compile_statement (env, true_) rest else compile_statement (env, true_) rest
   | Loop (body, loop, rest) -> if bool then compile_statement (env, body) (Compile_then (loop, rest)) else compile_statement (env, loop) rest
 
@@ -86,7 +86,7 @@ and compile_bool (env, bool_exp) rest =
   match bool_exp with
   | True -> interp_bool (env, Bool true) rest
   | False -> interp_bool (env, Bool false) rest
-  | Not exp -> (failwith "hole")
+  | Not exp -> compile_bool (env, exp) (Not(rest))
   | And (first, second) -> compile_bool (env, first) (Compile_then_and (second, rest))
   | Or (first, second) -> compile_bool (env, first) (Compile_then_or (second, rest))
   | Bool_op (first, op, second) -> compile_arith (env, first) (Compile_then_bool_op(op, second, rest))

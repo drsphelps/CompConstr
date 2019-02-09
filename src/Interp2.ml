@@ -1,4 +1,4 @@
-[open Ast
+open Ast
 ;;
 
 type instr =
@@ -39,11 +39,11 @@ let rec compile_bool = function
 
 let rec compile_statement = function
   | Skip ->  []
-  | Assign (var, exp) -> [Assign var] @ (compile_statement exp)
+  | Assign (var, exp) -> [Assign var] @ (compile_arith exp)
   | Seq (first, second) -> compile_statement first @ compile_statement second
   | If (cond, true_, false_) -> (compile_bool cond) @  [If (compile_statement true_, compile_statement false_)]
   | While (cond, body) -> let res = compile_bool cond in 
-    result @ [While (res, compile_statement body)]
+    res @ [While (res, compile_statement body)]
 ;;
 
 type value =
@@ -106,49 +106,48 @@ let rec interp (env, stack) = function
 
   | Not :: rest -> 
     let (a, stack') = one_bool stack in
-    if a then interp (env, false :: stack') rest
-    else interp (env, true :: stack') rest
+    interp (env, Bool (not a) :: stack') rest
 
   | And :: rest -> 
     let (a, b, stack') = two_bools stack in
-    if a && n then interp (env, true :: stack') rest
-    else interp (env, false :: stack') rest
+    if a && b then interp (env, Bool true :: stack') rest
+    else interp (env, Bool false :: stack') rest
 
   | Or :: rest -> 
     let (a, b, stack') = two_bools stack in
-    if a || b then interp (env, true :: stack') rest
-    else interp (env, false :: stack') rest
+    if a || b then interp (env, Bool true :: stack') rest
+    else interp (env, Bool false :: stack') rest
 
   | Less_than :: rest -> 
     let (a, b, stack') = two_ints stack in
-    if a < b then interp (env, true :: stack') rest
-    else interp (env, false :: stack') rest
+    if a < b then interp (env, Bool true :: stack') rest
+    else interp (env, Bool false :: stack') rest
 
   | Greater_than :: rest -> 
     let (a, b, stack') = two_ints stack in
-    if a > b then interp (env, true :: stack') rest
-    else interp (env, false :: stack') rest
+    if a > b then interp (env, Bool true :: stack') rest
+    else interp (env, Bool false :: stack') rest
 
   | Equals :: rest -> 
     let (a, b, stack') = two_ints stack in 
-    if a = b then interp (env, true :: stack') rest
-    else interp (env, false :: stack') rest
+    if a = b then interp (env, Bool true :: stack') rest
+    else interp (env, Bool false :: stack') rest
 
   | Assign var :: rest -> 
     let (a, stack') = one_int stack in
     interp ((var, a) :: env, stack') rest
 
   | If (true_, false_) :: rest -> 
-    let (a, stack') = one_bool  stack in
-    (match b with
-    | true -> interp (env, new_stack) (true_ @ rest)
-    | false -> interp (env, new_stack) (false_ @ rest))
+    let (a, stack') = one_bool stack in
+    (match a with
+    | true -> interp (env, stack') (true_ @ rest)
+    | false -> interp (env, stack') (false_ @ rest))
 
   | While (cond, body) as loop :: rest -> 
-    let (b, new_stack) = one_bool stack in
+    let (b, stack') = one_bool stack in
       (match b with
-      | true -> interp (env, new_stack) (body @ [loop] @ rest)
-      | false -> interp (env, new_stack) rest)
+      | true -> interp (env, stack') (body @ [loop] @ rest)
+      | false -> interp (env, stack') rest)
 
 ;;
 
