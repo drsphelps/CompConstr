@@ -1,6 +1,4 @@
-[@@@ocaml.warning "-27"]
-
-open Ast
+[open Ast
 ;;
 
 type instr =
