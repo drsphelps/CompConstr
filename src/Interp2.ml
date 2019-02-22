@@ -1,4 +1,4 @@
-open Ast
+open Ast0
 ;;
 
 type instr =
@@ -16,6 +16,15 @@ type instr =
   | Assign of string
   | If of instr list * instr list
   | While of instr list * instr list
+  | Pop_env
+  | Pop_stack
+  | Push_closure of compiled_closure
+  | Call
+
+and compiled_closure = {
+  arg : string;
+  body : instr list;
+}
 ;;
 
 let rec compile_arith = function
@@ -31,39 +40,58 @@ let rec compile_bool = function
   | Not exp -> compile_bool exp @ [Not]
   | And (first, second) -> compile_bool first @ compile_bool second @ [And]
   | Or (first, second) -> compile_bool first @ compile_bool second @ [Or]
-  | Bool_op (first, op, second) -> let result = compile_arith first @ compile_arith second in
-                                   match op with
-                                   | Lt -> result @ [Less_than]
-                                   | Gt -> result @ [Greater_than]
-                                   | Eq -> result @ [Equals]
+  | Bool_op (first, op, second) ->
+    let op = match op with
+      | Lt -> Less_than
+      | Gt -> Greater_than
+      | Eq -> Equals in
+    compile_arith first @ compile_arith second @ [op]
 
 let rec compile_statement = function
   | Skip ->  []
-  | Assign (var, exp) -> (compile_arith exp) @ [Assign var]
-  | Seq (first, second) -> compile_statement first @ compile_statement second
-  | If (cond, true_, false_) -> (compile_bool cond) @  [If (compile_statement true_, compile_statement false_)]
-  | While (cond, body) -> let res = compile_bool cond in 
-    res @ [While (res, compile_statement body)]
+  | Assign (var, (First (None, exp))) ->
+    compile_arith exp @ [Assign var]
+
+  | Assign (var, (First (Some func, exp))) ->
+    compile_arith exp @ [ Lookup func; Call; Pop_env; Assign var ]
+
+  | Assign (var, Second { arg; body; return } ) ->
+    [Push_closure { arg; body = compile_statement body @ compile_arith return }; Assign var ]
+
+  | Call (func, exp) ->
+    compile_arith exp @ [ Lookup func; Call; Pop_env; Pop_stack (* no assign *)]
+
+  | Seq (first, second) ->
+    compile_statement first @ compile_statement second
+
+  | If (cond, true_, false_) ->
+    compile_bool cond @ [If (compile_statement true_, compile_statement false_)]
+
+  | While (cond, body) ->
+    [While (compile_bool cond, compile_statement body)]
 ;;
 
 type value =
   | Int of int
   | Bool of bool
+  | Closure of compiled_closure
 ;;
 
 type env =
-  (string * int) list
+  (string * (int, compiled_closure) Either.t) list
 ;;
 
 let lookup env var =
-  Int (List.Assoc.find_exn env ~equal:String.(=) var)
-;;
-
-exception Malformed_stack
+  match List.Assoc.find_exn env ~equal:String.(=) var with
+  | Either.First int -> Int int
+  | Second closure -> Closure closure
 ;;
 
 type stack =
   value list
+;;
+
+exception Malformed_stack
 ;;
 
 let one_bool = function
@@ -86,68 +114,74 @@ let two_ints = function
   | _ ->  raise Malformed_stack
 ;;
 
-let rec interp (env, stack) = function
+let closure_and_int = function
+  | Closure closure  :: Int int :: stack -> (closure, int, stack)
+  | _ -> raise Malformed_stack
+;;
 
+let rec interp (env, stack) = function
   | [] -> (env, stack)
 
-  | Lookup var :: rest -> interp (env, (lookup env var) :: stack) rest
+  | Lookup var :: rest -> interp (env, lookup env var :: stack) rest
 
-  | Push_int int :: rest -> interp (env, Int int :: stack) rest 
+  | Push_int int :: rest -> interp (env, Int int :: stack) rest
 
-  | Plus :: rest -> 
-    let (a, b, stack') = two_ints stack in
-    interp (env, Int (a + b) :: stack') rest
+  | Plus :: rest ->
+    let (a, b, stack) = two_ints stack in
+    interp (env, Int (a + b) :: stack) rest
 
-  | Times :: rest -> 
-    let (a, b, stack') = two_ints stack in
-    interp (env, Int (a * b) :: stack') rest
+  | Times :: rest ->
+    let (a, b, stack) = two_ints stack in
+    interp (env, Int (a * b) :: stack) rest
 
-  | Push_bool bool :: rest -> interp (env, Bool bool :: stack) rest 
+  | Push_bool bool :: rest -> interp (env, Bool bool :: stack) rest
+  | Not :: rest ->
+    let (bool, stack) = one_bool stack in
+    interp (env, Bool (not bool) :: stack) rest
 
-  | Not :: rest -> 
-    let (a, stack') = one_bool stack in
-    interp (env, Bool (not a) :: stack') rest
+  | And :: rest ->
+    let (a, b, stack) = two_bools stack in
+    interp (env, Bool (a && b) :: stack) rest
 
-  | And :: rest -> 
-    let (a, b, stack') = two_bools stack in
-    if a && b then interp (env, Bool true :: stack') rest
-    else interp (env, Bool false :: stack') rest
+  | Or :: rest ->
+    let (a, b, stack) = two_bools stack in
+    interp (env, Bool (a || b) :: stack) rest
 
-  | Or :: rest -> 
-    let (a, b, stack') = two_bools stack in
-    if a || b then interp (env, Bool true :: stack') rest
-    else interp (env, Bool false :: stack') rest
+  | Less_than :: rest ->
+    let (a, b, stack) = two_ints stack in
+    interp (env, Bool (a < b) :: stack) rest
 
-  | Less_than :: rest -> 
-    let (a, b, stack') = two_ints stack in
-    if a < b then interp (env, Bool true :: stack') rest
-    else interp (env, Bool false :: stack') rest
+  | Greater_than :: rest ->
+    let (a, b, stack) = two_ints stack in
+    interp (env, Bool (a > b) :: stack) rest
 
-  | Greater_than :: rest -> 
-    let (a, b, stack') = two_ints stack in
-    if a > b then interp (env, Bool true :: stack') rest
-    else interp (env, Bool false :: stack') rest
+  | Equals :: rest ->
+    let (a, b, stack) = two_ints stack in
+    interp (env, Bool (a = b) :: stack) rest
 
-  | Equals :: rest -> 
-    let (a, b, stack') = two_ints stack in 
-    if a = b then interp (env, Bool true :: stack') rest
-    else interp (env, Bool false :: stack') rest
+  | Assign var :: rest ->
+    let (a, stack) = one_int stack in
+    interp ((var, First a) :: env, stack) rest
 
-  | Assign var :: rest -> 
-    let (a, stack') = one_int stack in
-    interp ((var, a) :: env, stack') rest
+  | If (true_, false_) :: rest ->
+    let (a, stack) = one_bool stack in
+    interp (env, stack) ((if a then true_ else false_) @ rest)
 
-  | If (true_, false_) :: rest -> 
-    let (a, stack') = one_bool stack in
-    (match a with
-    | true -> interp (env, stack') (true_ @ rest)
-    | false -> interp (env, stack') (false_ @ rest))
+  | While (cond, body) as loop :: rest ->
+    interp (env, stack) (cond @ [If (body @ [loop], [])] @ rest)
 
-  | While (cond, body) as loop :: rest -> 
-    let (b, stack') = one_bool stack in
-      (match b with
-      | true -> interp (env, stack') (body @ [loop] @ rest)
-      | false -> interp (env, stack') rest)
+  | Push_closure closure :: rest ->
+    interp (env, (Closure closure) :: stack) rest
+
+  | Call :: rest ->
+    let ({arg; body}, int, stack) = closure_and_int stack in
+    interp ((arg, First int) :: env, stack ) (body @ rest)
+
+  | Pop_stack :: rest ->
+    interp (env, List.tl_exn stack) rest
+
+  | Pop_env :: rest ->
+    interp (List.tl_exn env, stack) rest
 
 ;;
 
